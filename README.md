@@ -1,15 +1,8 @@
-# vite-plugin-iconify-offline
+# vite-plugin-iconify-offline ![Latest version](https://img.shields.io/github/v/release/typed-sigterm/vite-plugin-iconify-offline) ![License](https://img.shields.io/github/license/typed-sigterm/vite-plugin-iconify-offline) ![OSS Lifecycle](https://img.shields.io/osslifecycle?file_url=https%3A%2F%2Fraw.githubusercontent.com%2Ftyped-sigterm%2Fvite-plugin-iconify-offline%2Fmain%2FOSSMETADATA) [![GitHub Stars](https://img.shields.io/github/stars/typed-sigterm/vite-plugin-iconify-offline)](https://github.com/typed-sigterm/vite-plugin-iconify-offline)
 
 A Vite plugin to bundle Iconify icons for offline use.
 
 Originally developed to fix [nuxt/ui#5242](https://github.com/nuxt/ui/issues/5242), and the implementation is based on the idea from [@adamrybak](https://github.com/nuxt/ui/issues/5242#issuecomment-3713093172).
-
-## Features
-
-- Scans your source code for Iconify icons (format: `prefix:name` or `prefix-name`).
-- Automatically collects icons from `@iconify-json/*` packages installed in your `node_modules`.
-- Generates a virtual module `virtual:iconify-offline` that provides a `loadIcons()` function.
-- Bundles only the used icons into your application, reducing the bundle size.
 
 ## Installation
 

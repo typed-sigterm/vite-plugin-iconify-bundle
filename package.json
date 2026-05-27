@@ -36,6 +36,7 @@
   "scripts": {
     "dev": "tsdown --watch",
     "build": "tsdown",
+    "lint": "eslint .",
     "test": "vitest run"
   },
   "peerDependencies": {
