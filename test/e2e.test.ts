@@ -13,6 +13,7 @@ describe('e2e', () => {
       logLevel: 'silent',
       plugins: [
         pluginIconifyOffline({
+          module: '@iconify/vue',
           files: [join(root, 'index.html')],
           additional: ['lucide:check', 'simple-icons:figma'],
         }),

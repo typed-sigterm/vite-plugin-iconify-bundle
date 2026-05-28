@@ -27,12 +27,27 @@ export interface Options {
    * @example 'collection:name'
    */
   additional?: string[]
+  /**
+   * Module to import addIcon from. Candidate values:
+   *
+   * - Web Component for React: `@iconify-icon/react`
+   * - Web Component for Solid: `@iconify-icon/solid`
+   * - Vue: `@iconify/vue`
+   * - React: `@iconify/react`
+   * - Svelte: `@iconify/svelte`
+   */
+  module: string
 }
 
-export default function iconifyOffline(options: Options = {}) {
-  const { files = [], additional = [] } = options;
+const PACKAGE_NAME_REGEX = /^(?:@(?:[a-z0-9-*~][a-z0-9-*._~]*)?\/[a-z0-9-._~]|[a-z0-9-~])[a-z0-9-._~]*$/;
+
+export default function iconifyOffline(options: Options) {
+  const { files = [], additional = [], module } = options;
   const virtualModuleId = 'virtual:iconify-offline';
   const resolvedVirtualModuleId = `\0${virtualModuleId}`;
+
+  if (!PACKAGE_NAME_REGEX.test(module))
+    throw new Error(`Invalid module name: ${module}`);
 
   const collections = new Map<string, IconifyCollection>();
   const usedIcons = new Map<string, Set<string>>(); // collection -> set of names
@@ -177,7 +192,7 @@ export default function iconifyOffline(options: Options = {}) {
       async handler() {
         if (preloadTask)
           await preloadTask;
-        let code = `import { addCollection } from "@iconify/vue";\n\n`;
+        let code = `import { addIcon } from "${module}";\n\n`;
 
         for (const [collectionName] of usedIcons.entries()) {
           const varName = `_${collectionName.replace(/-/g, '_')}`;
@@ -189,19 +204,15 @@ export default function iconifyOffline(options: Options = {}) {
         for (const [collectionName, icons] of usedIcons.entries()) {
           const varName = `_${collectionName.replace(/-/g, '_')}`;
           const full = collections.get(collectionName)!;
-          code += `  let subset_${varName} = {\n`;
-          code += `    prefix: "${full.prefix}",\n`;
+          code += `  const ref_${varName} = {\n`;
           if (full.width)
             code += `    width: ${full.width},\n`;
           if (full.height)
             code += `    height: ${full.height},\n`;
-          code += `    icons: {},\n`;
-          code += `    aliases: {}\n`;
           code += `  };\n`;
 
           const queue = Array.from(icons);
           const added = new Set<string>();
-          const addedAliases = new Set<string>();
 
           while (queue.length > 0) {
             const name = queue.shift()!;
@@ -209,18 +220,31 @@ export default function iconifyOffline(options: Options = {}) {
               continue;
             added.add(name);
 
-            if (full.icons && full.icons[name]) {
-              code += `  subset_${varName}.icons["${name}"] = ${varName}.icons["${name}"];\n`;
-            } else if (full.aliases && full.aliases[name]) {
-              addedAliases.add(name);
-              code += `  subset_${varName}.aliases["${name}"] = ${varName}.aliases["${name}"];\n`;
-              const alias = full.aliases[name];
-              if (alias.parent) {
-                queue.push(alias.parent);
+            let current = name;
+            const pieces: string[] = [];
+            let isValid = false;
+
+            while (current) {
+              if (full.icons && full.icons[current]) {
+                pieces.push(`...${varName}.icons["${current}"]`);
+                isValid = true;
+                break;
+              } else if (full.aliases && full.aliases[current]) {
+                pieces.push(`...${varName}.aliases["${current}"]`);
+                const parent = full.aliases![current]!.parent;
+                current = parent;
+              } else {
+                break;
               }
             }
+
+            if (isValid) {
+              pieces.reverse();
+              const safeName = name.replace(/[^a-z0-9]/gi, '_');
+              code += `  const data_${varName}_${safeName} = { ...ref_${varName}, ${pieces.join(', ')} };\n`;
+              code += `  addIcon("${collectionName}:${name}", data_${varName}_${safeName});\n`;
+            }
           }
-          code += `  addCollection(subset_${varName});\n`;
         }
 
         code += `}\n`;

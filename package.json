@@ -49,6 +49,7 @@
     "@antfu/eslint-config": "^9.0.0",
     "@iconify-json/lucide": "^1.2.109",
     "@iconify-json/simple-icons": "^1.2.84",
+    "@iconify/vue": "^5.0.1",
     "@rollup/plugin-json": "^6.1.0",
     "@tsconfig/bun": "^1.0.10",
     "@typed-sigterm/eslint-config": "^1.7.1",
