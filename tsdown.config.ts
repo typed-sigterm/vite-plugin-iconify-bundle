@@ -6,4 +6,10 @@ export default defineConfig({
   ],
   dts: true,
   clean: true,
+  deps: {
+    onlyBundle: false,
+  },
 });
+
+// Didn't add `rolldown` to `peerDependencies` because Vite 7 is still widely used
+// Will add after Nuxt upgrades to Vite 8

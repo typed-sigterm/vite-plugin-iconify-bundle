@@ -1,6 +1,6 @@
 # vite-plugin-iconify-offline ![Latest version](https://img.shields.io/github/v/release/typed-sigterm/vite-plugin-iconify-offline) ![License](https://img.shields.io/github/license/typed-sigterm/vite-plugin-iconify-offline) ![OSS Lifecycle](https://img.shields.io/osslifecycle?file_url=https%3A%2F%2Fraw.githubusercontent.com%2Ftyped-sigterm%2Fvite-plugin-iconify-offline%2Fmain%2FOSSMETADATA) [![GitHub Stars](https://img.shields.io/github/stars/typed-sigterm/vite-plugin-iconify-offline)](https://github.com/typed-sigterm/vite-plugin-iconify-offline)
 
-A Vite plugin to bundle Iconify icons for offline use.
+Bundle Iconify icons for offline use in production build.
 
 Originally developed to fix [nuxt/ui#5242](https://github.com/nuxt/ui/issues/5242), and the implementation is based on the idea from [@adamrybak](https://github.com/nuxt/ui/issues/5242#issuecomment-3713093172).
 
@@ -21,10 +21,10 @@ npm install -D vite-plugin-iconify-offline
     export default defineConfig({
       plugins: [
         iconifyOffline({
+          module: '@iconify/vue',
           files: ['./components/**/*.vue', './pages/**/*.vue'],
-          additional: ['lucide:check-circle']
-        })
-      ]
+        }),
+      ],
     });
     ```
 

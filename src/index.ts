@@ -1,32 +1,12 @@
-import type { Plugin, ViteDevServer } from 'vite';
-import { existsSync, readdirSync, readFileSync } from 'node:fs';
+import type { IconifyJSONIconsData } from '@iconify/types';
+import type { Plugin } from 'vite';
+import { readdir, readFile, stat } from 'node:fs/promises';
 import { join } from 'node:path';
 import process from 'node:process';
 import { exactRegex } from 'rolldown/filter';
 import { glob } from 'tinyglobby';
 
-/**
- * Iconify collection data structure.
- */
-export interface IconifyCollection {
-  prefix: string
-  icons: Record<string, { body: string }>
-  aliases?: Record<string, { parent: string }>
-  width?: number
-  height?: number
-}
-
 export interface Options {
-  /**
-   * Globs to scan for icons. These files will be scanned in addition to those processed by Vite.
-   */
-  files?: string[]
-  /**
-   * Additional icons to include in the bundle.
-   *
-   * @example 'collection:name'
-   */
-  additional?: string[]
   /**
    * Module to import addIcon from. Candidate values:
    *
@@ -37,22 +17,33 @@ export interface Options {
    * - Svelte: `@iconify/svelte`
    */
   module: string
+  /**
+   * Globs to scan for icons.
+   */
+  files: string[]
+  /**
+   * Additional icons to include in the bundle.
+   *
+   * @example 'collection:name'
+   */
+  additional?: string[]
 }
 
+const VIRTUAL_MODULE_ID = 'virtual:iconify-offline';
 const PACKAGE_NAME_REGEX = /^(?:@(?:[a-z0-9-*~][a-z0-9-*._~]*)?\/[a-z0-9-._~]|[a-z0-9-~])[a-z0-9-._~]*$/;
 
 export default function iconifyOffline(options: Options) {
-  const { files = [], additional = [], module } = options;
-  const virtualModuleId = 'virtual:iconify-offline';
-  const resolvedVirtualModuleId = `\0${virtualModuleId}`;
+  const { files, additional = [], module } = options;
+  const resolvedVirtualModuleId = `\0${VIRTUAL_MODULE_ID}`;
 
   if (!PACKAGE_NAME_REGEX.test(module))
     throw new Error(`Invalid module name: ${module}`);
 
-  const collections = new Map<string, IconifyCollection>();
-  const usedIcons = new Map<string, Set<string>>(); // collection -> set of names
-  let server: ViteDevServer | null = null;
-  let preloadTask: Promise<void> | null = null;
+  const collections = new Map<string, IconifyJSONIconsData>();
+  const usedIcons = new Map<string, Set<string>>();
+  let iconRegex: RegExp | null = null;
+  let initPromise: Promise<void> | null = null;
+  let isBuild = true;
 
   function addIcon(collectionName: string, iconName: string): boolean {
     const data = collections.get(collectionName);
@@ -74,113 +65,84 @@ export default function iconifyOffline(options: Options) {
   }
 
   // Find all installed @iconify-json packages
-  function findCollections(): void {
+  async function findCollections(): Promise<void> {
     const root = join(process.cwd(), 'node_modules');
     const scopePath = join(root, '@iconify-json');
-    if (existsSync(scopePath)) {
-      const dirs = readdirSync(scopePath);
-      for (const dir of dirs) {
-        const pkgPath = join(scopePath, dir, 'icons.json');
-        if (existsSync(pkgPath)) {
-          try {
-            const data = JSON.parse(readFileSync(pkgPath, 'utf-8')) as IconifyCollection;
+    const dirStat = await stat(scopePath);
+    if (dirStat.isDirectory()) {
+      const dirs = await readdir(scopePath);
+      await Promise.all(
+        dirs.map(async (dir) => {
+          const pkgPath = join(scopePath, dir, 'icons.json');
+          const fileStat = await stat(pkgPath);
+          if (fileStat.isFile()) {
+            const content = await readFile(pkgPath, 'utf-8');
+            const data = JSON.parse(content) as IconifyJSONIconsData;
             collections.set(dir, data);
-          } catch (cause) {
-            throw new Error(`Failed to load collection ${dir}`, { cause });
           }
-        }
-      }
+        }),
+      );
+    }
+
+    const collectionPrefixes = Array.from(collections.keys());
+
+    // Regex pattern: {collection}-{name}
+    iconRegex = collectionPrefixes.length > 0
+      ? new RegExp(`\\b(${collectionPrefixes.join('|')})[:-]([\\w-]+)`, 'g')
+      : null;
+
+    // Add additional icons
+    for (const item of additional) {
+      const parts = item.split(':');
+      if (parts.length !== 2)
+        throw new Error(`Invalid additional icon ${item}`);
+      addIcon(parts[0]!, parts[1]!);
     }
   }
-
-  findCollections();
-
-  const collectionPrefixes = Array.from(collections.keys());
-
-  // Regex pattern: {collection}-{name}
-  const iconRegex = collectionPrefixes.length > 0
-    ? new RegExp(`\\b(${collectionPrefixes.join('|')})[:-]([\\w-]+)`, 'g')
-    : null;
 
   function scanCode(code: string): void {
     if (!iconRegex)
       return;
     const matches = code.matchAll(iconRegex);
-    let changed = false;
     for (const match of matches) {
       const [, collectionName, iconName] = match;
-      if (collectionName && iconName && addIcon(collectionName, iconName)) {
-        changed = true;
-      }
+      if (collectionName && iconName)
+        addIcon(collectionName, iconName);
     }
-
-    if (changed && server) {
-      const mod = server.moduleGraph.getModuleById(resolvedVirtualModuleId);
-      if (mod) {
-        server.reloadModule(mod).catch(() => {});
-      }
-    }
-  }
-
-  // Add additional icons
-  for (const item of additional) {
-    const parts = item.split(':');
-    if (parts.length !== 2)
-      throw new Error(`Invalid additional icon ${item}`);
-    addIcon(parts[0]!, parts[1]!);
   }
 
   return {
     name: 'vite-plugin-iconify-offline',
     enforce: 'post',
 
-    configureServer(s) {
-      server = s;
+    configResolved(config) {
+      isBuild = config.command === 'build';
+      if (isBuild)
+        initPromise = findCollections();
     },
 
-    async buildStart(options) {
-      const preload = async (): Promise<void> => {
-        // Scan files
-        if (files.length > 0) {
-          const matchedFiles = await glob(files, { absolute: true });
-          for (const file of matchedFiles) {
-            try {
-              const content = readFileSync(file, 'utf-8');
-              scanCode(content);
-              if (server)
-                this.addWatchFile(file);
-            } catch (cause) {
-              throw new Error(`Failed to read file ${file}`, { cause });
-            }
+    async buildStart() {
+      if (!isBuild)
+        return;
+      await initPromise;
+
+      const matchedFiles = await glob(files, { absolute: true });
+
+      await Promise.all(
+        matchedFiles.map(async (file) => {
+          try {
+            const content = await readFile(file, 'utf-8');
+            scanCode(content);
+          } catch (cause) {
+            throw new Error(`Failed to read file ${file}`, { cause });
           }
-        }
-
-        // Preload module graph to ensure all icons are collected
-        const input = options?.input;
-        const loadIds = input
-          ? (Array.isArray(input) ? [...input] : Object.values(input))
-          : [];
-
-        const loadedIds = new Set<string>();
-        while (loadIds.length) {
-          const loadId = loadIds.shift();
-          if (!loadId || loadId === resolvedVirtualModuleId || loadId === virtualModuleId || loadedIds.has(loadId))
-            continue;
-          loadedIds.add(loadId);
-
-          const info = await this.load({ id: loadId, resolveDependencies: true });
-          if (info) {
-            loadIds.push(...info.importedIds);
-            loadIds.push(...info.dynamicallyImportedIds);
-          }
-        }
-      };
-      preloadTask = preload();
+        }),
+      );
     },
 
     resolveId: {
       filter: {
-        id: exactRegex(virtualModuleId),
+        id: exactRegex(VIRTUAL_MODULE_ID),
       },
       handler: () => resolvedVirtualModuleId,
     },
@@ -190,8 +152,10 @@ export default function iconifyOffline(options: Options) {
         id: exactRegex(resolvedVirtualModuleId),
       },
       async handler() {
-        if (preloadTask)
-          await preloadTask;
+        if (!isBuild)
+          return `export function loadIcons() {}\n`;
+
+        await initPromise;
         let code = `import { addIcon } from "${module}";\n\n`;
 
         for (const [collectionName] of usedIcons.entries()) {
@@ -251,12 +215,5 @@ export default function iconifyOffline(options: Options) {
         return code;
       },
     },
-
-    transform(code, id) {
-      if (id.includes('node_modules') || id === resolvedVirtualModuleId || id === virtualModuleId) {
-        return;
-      }
-      scanCode(code);
-    },
-  } satisfies Plugin<any>;
+  } satisfies Plugin;
 }
