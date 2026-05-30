@@ -1,21 +1,18 @@
 {
-  "name": "vite-plugin-iconify-offline",
+  "name": "vite-plugin-iconify-bundle",
   "type": "module",
   "version": "1.0.0",
-  "description": "Vite plugin to support offline Iconify icons rendering.",
+  "description": "On-demand bundle Iconify icons to the client.",
   "author": "Typed SIGTERM",
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/typed-sigterm/vite-plugin-iconify-offline.git"
+    "url": "git+https://github.com/typed-sigterm/vite-plugin-iconify-bundle.git"
   },
   "keywords": [
     "rolldown-plugin",
     "vite-plugin"
   ],
-  "publishConfig": {
-    "provenance": true
-  },
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",

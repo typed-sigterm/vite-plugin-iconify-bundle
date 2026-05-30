@@ -112,7 +112,7 @@ export default function iconifyOffline(options: Options) {
   }
 
   return {
-    name: 'vite-plugin-iconify-offline',
+    name: 'vite-plugin-iconify-bundle',
     enforce: 'post',
 
     configResolved(config) {
