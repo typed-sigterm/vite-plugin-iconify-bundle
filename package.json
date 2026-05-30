@@ -1,7 +1,7 @@
 {
   "name": "vite-plugin-iconify-bundle",
   "type": "module",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "On-demand bundle Iconify icons to the client.",
   "author": "Typed SIGTERM",
   "license": "MIT",
@@ -30,6 +30,9 @@
     "client.d.ts",
     "dist"
   ],
+  "publishConfig": {
+    "provenance": true
+  },
   "scripts": {
     "dev": "tsdown --watch",
     "build": "tsdown",
